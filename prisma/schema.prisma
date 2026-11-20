@@ -1,0 +1,101 @@
+// AgriSama IA - Schéma de base de données PostgreSQL (Supabase Full-Stack)
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  role         String   // ADMINISTRATEUR, PRODUCTEUR, ACHETEUR
+  name         String
+  phone        String   @unique
+  location     String   // Localisation (ex: Mboro, Notto Gouye Diama, Diogo, Dakar, Thiès...)
+  organization String?  // Nom de l'exploitation, coopérative ou société d'achat
+  passwordHash String?  // Empreinte salée scrypt pour authentification sécurisée
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  offers         Offer[]  @relation("ProducerOffers")
+  reservedOffers Offer[]  @relation("UserReservations")
+  demands        Demand[]
+
+  @@index([role])
+}
+
+model Offer {
+  id                  String    @id @default(uuid())
+  producerId          String
+  producer            User      @relation("ProducerOffers", fields: [producerId], references: [id], onDelete: Cascade)
+  product             String    // Variété d'oignon (ex: Oignon Violet de Galmi, Oignon Yaakaar, Oignon Blanc)
+  quantityValue       Float     // Valeur saisie (ex: 5 ou 5000)
+  quantityUnit        String    @default("KG") // KG ou TONNE
+  quantityKg          Float     // Quantité normalisée en kilogrammes (1 TONNE = 1000 KG)
+  pricePerKg          Float     // Prix souhaité en FCFA / kg
+  location            String    // Localisation de la récolte
+  availableDate       DateTime  // Date de disponibilité
+  quality             String    // Catégorie 1, Standard, Catégorie 2
+  status              String    @default("DISPONIBLE") // DISPONIBLE, RESERVEE, VENDUE
+  imageUrl            String?   // Photo facultative stockée sur Supabase Storage (agrisama-media)
+  reservedForDemandId String?
+  reservedForDemand   Demand?   @relation("DemandReservations", fields: [reservedForDemandId], references: [id], onDelete: SetNull)
+  reservedByUserId    String?
+  reservedByUser      User?     @relation("UserReservations", fields: [reservedByUserId], references: [id], onDelete: SetNull)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  matches             Match[]
+
+  @@index([product, status])
+  @@index([producerId])
+  @@index([reservedForDemandId])
+  @@index([reservedByUserId])
+}
+
+model Demand {
+  id            String   @id @default(uuid())
+  buyerId       String
+  buyer         User     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  product       String   // Produit recherché
+  quantityValue Float    // Valeur saisie
+  quantityUnit  String   @default("KG") // KG ou TONNE
+  quantityKg    Float    // Quantité normalisée en kilogrammes
+  maxPricePerKg Float    // Prix maximum ou budget en FCFA / kg
+  location      String   // Localisation de livraison
+  desiredDate   DateTime // Date souhaitée
+  quality       String   // Catégorie 1, Standard, Catégorie 2, Toutes qualités
+  status        String   @default("ACTIVE") // ACTIVE, CLOTUREE
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  matches        Match[]
+  reservedOffers Offer[] @relation("DemandReservations")
+
+  @@index([product, status])
+  @@index([buyerId])
+}
+
+model Match {
+  id                 String   @id @default(uuid())
+  offerId            String
+  offer              Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  demandId           String
+  demand             Demand   @relation(fields: [demandId], references: [id], onDelete: Cascade)
+  compatibilityScore Int      // Pourcentage réel 0 à 100
+  quantityScore      Int
+  priceScore         Int
+  locationScore      Int
+  dateScore          Int
+  qualityScore       Int
+  explanation        String   // Ex: "Correspondance à 90 % : produit compatible, quantité suffisante et localisation adaptée."
+  updatedAt          DateTime @updatedAt
+
+  @@unique([offerId, demandId])
+  @@index([demandId])
+  @@index([compatibilityScore])
+}
